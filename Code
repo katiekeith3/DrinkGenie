@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Drink Genie 🍸</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 900px;
+      margin: auto;
+      background-color: #70193D; /* Mulberry purple */
+      color: white;
+    }
+    input, button {
+      padding: 8px;
+      margin: 5px 0;
+      border: none;
+      border-radius: 5px;
+    }
+    input { width: 90%; }
+    button {
+      background-color: #FFA07A;
+      color: #70193D;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:hover { background-color: #FF7F50; }
+    .drink {
+      margin-bottom: 20px;
+      padding: 10px;
+      border: 1px solid #FFA07A;
+      border-radius: 8px;
+      background-color: rgba(255,255,255,0.05);
+    }
+    #strengthSlider { width: 200px; }
+    hr { margin: 30px 0; border-color: #FFA07A; }
+    h1,h2,h3 { color: #FFDAB9; }
+    em { color: #FFE4E1; }
+    .game-container { margin-top: 20px; }
+    .output { margin-top: 10px; font-size: 1.2em; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+<h1>🍸 Drink Genie</h1>
+
+<h3>What’s in your fridge?</h3>
+<input id="ingredients" placeholder="vodka, gin, rum, tequila, lime juice" />
+<br />
+
+<h3>Choose your preferred drink strength:</h3>
+<input type="range" id="strengthSlider" min="1" max="3" value="3">
+<span id="strengthValue">Strong</span>
+<br />
+
+<button onclick="getDrinks()">Get Cocktail Ideas</button>
+<div id="drinkResults"></div>
+
+<hr />
+
+<h2>🎡 Spin the Wheel Drinking Game</h2>
+<button onclick="spinWheel()">SPIN</button>
+<h3 id="spinResult"></h3>
+
+<hr />
+
+<h2>🎉 Truth or Dare (18+)</h2>
+<div class="game-container">
+  <button onclick="showTruth()">Truth</button>
+  <button onclick="showDare()">Dare</button>
+
+  <div id="truthDareOutput" class="output"></div>
+</div>
+
+<script>
+// --------------- Truth / Dare Lists ---------------
+
+const truthList = [
+  "What’s the funniest thing you’ve done drunk?",
+  "Who in the room would you marry if you had to?",
+  "What’s the worst date you’ve ever been on?",
+  "Have you ever lied about your drinking?",
+  "What’s your most embarrassing drunk moment?",
+  "Who here would you want to switch drinks with for a round?",
+  "What’s a secret you’ve never told anyone?",
+  "Have you ever kissed someone unexpected while drunk?",
+  "What’s the weirdest place you’ve woken up after a night out?",
+  "Who here do you think has the best party stories?"
+];
+
+const dareList = [
+  "Take a sip and reveal your last crush.",
+  "Swap drinks with someone for the next round.",
+  "Take a big sip if you’ve ever danced on a table.",
+  "Make someone laugh in 10 seconds or take 2 sips.",
+  "Do your best dance move for 20 seconds.",
+  "Take a sip and share your worst pick‑up line.",
+  "Text a random contact and say, ‘Drink responsibly’.",
+  "Slowly sip while staring into someone’s eyes.",
+  "Sing a line from a silly song, or drink twice.",
+  "Speak only in rhymes until your next turn."
+];
+
+function showTruth() {
+  const random = truthList[Math.floor(Math.random() * truthList.length)];
+  document.getElementById("truthDareOutput").textContent = "🗣️ Truth: " + random;
+}
+
+function showDare() {
+  const random = dareList[Math.floor(Math.random() * dareList.length)];
+  document.getElementById("truthDareOutput").textContent = "🔥 Dare: " + random;
+}
+
+// --------------- Cocktail Fetch Logic ---------------
+
+const strengthMap = { "1": "Light", "2": "Medium", "3": "Strong" };
+
+async function getDrinks() {
+  const fridge = document.getElementById("ingredients").value
+    .toLowerCase().split(",").map(i => i.trim()).filter(Boolean);
+
+  const resultsDiv = document.getElementById("drinkResults");
+  resultsDiv.innerHTML = "<p>🍹 Fetching cocktails...</p>";
+
+  const selectedStrength = strengthMap[document.getElementById("strengthSlider").value];
+  let drinks = [];
+
+  for (const ingredient of fridge) {
+    try {
+      const res = await fetch(`https://www.thecocktaildb.com/api/json/v1/1/filter.php?i=${ingredient}`);
+      const data = await res.json();
+      if (data.drinks) drinks.push(...data.drinks);
+    } catch (err) {
+      console.error("Error fetching", ingredient, err);
+    }
+  }
+
+  if (drinks.length === 0) {
+    resultsDiv.innerHTML = "<p>😢 No drinks found with those ingredients.</p>";
+    return;
+  }
+
+  const uniqueDrinks = {};
+  drinks.forEach(d => { uniqueDrinks[d.idDrink] = d; });
+  const drinkList = Object.values(uniqueDrinks);
+
+  resultsDiv.innerHTML = "<p>🍸 Loading drink details...</p>";
+
+  const detailedDrinks = await Promise.all(
+    drinkList.slice(0, 10).map(async d => {
+      const res = await fetch(`https://www.thecocktaildb.com/api/json/v1/1/lookup.php?i=${d.idDrink}`);
+      const data = await res.json();
+      return data.drinks[0];
+    })
+  );
+
+  resultsDiv.innerHTML = "";
+  detailedDrinks.forEach(drink => {
+    const ingredients = [];
+    for (let i = 1; i <= 15; i++) {
+      const item = drink[`strIngredient${i}`];
+      const amount = drink[`strMeasure${i}`] || "";
+      if (item) ingredients.push({ item: item.toLowerCase(), amount });
+    }
+
+    let strengthLabel = "Light";
+    if (drink.strAlcoholic === "Alcoholic") strengthLabel = "Medium";
+    if (drink.strAlcoholic === "Strong Alcoholic") strengthLabel = "Strong";
+
+    const strengthOrder = { Light: 1, Medium: 2, Strong: 3 };
+    if (strengthOrder[strengthLabel] > strengthOrder[selectedStrength]) return;
+
+    const div = document.createElement("div");
+    div.className = "drink";
+    div.innerHTML = `
+      <strong>${drink.strDrink}</strong><br/>
+      Glass: ${drink.strGlass || "Any"} | Strength: ${strengthLabel}<br/>
+      Ingredients:<br/>
+      ${ingredients.map(i => `${i.amount} ${i.item}`).join("<br/>")}
+      <br/><em>${drink.strInstructions}</em>
+    `;
+    resultsDiv.appendChild(div);
+  });
+}
+
+// 🎡 Spin‑the‑Wheel Game
+
+const wheel = ["Take a sip","Give a sip","Take 2 sips","Truth","Dare","Everyone drinks"];
+function spinWheel() {
+  const result = wheel[Math.floor(Math.random() * wheel.length)];
+  document.getElementById("spinResult").textContent = result;
+}
+
+// Update slider label live
+
+const slider = document.getElementById("strengthSlider");
+const strengthLabelEl = document.getElementById("strengthValue");
+slider.addEventListener("input", () => {
+  const map = { "1": "Light", "2": "Medium", "3": "Strong" };
+  strengthLabelEl.textContent = map[slider.value];
+});
+</script>
+
+</body>
+</html>
